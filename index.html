@@ -43,11 +43,11 @@ button.bad{background:var(--bad);border-color:var(--bad);color:#fff;font-weight:
 .speed .tgt{text-align:center}
 .speed .tgt .v{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
 .speed .tgt .l{font-size:12px;color:var(--mut)}
-.presets{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.presets{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
 .presets button{padding:16px 0;font-weight:700;font-size:20px}
 .presets button.edit{border-color:var(--bad);color:var(--bad)}
-.quick{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:10px}
-.quick button{padding:12px 0;font-weight:600}
+.quick{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+.quick button{padding:14px 0;font-weight:600;font-size:18px}
 .presets .empty{grid-column:1/-1;color:var(--mut);font-size:14px;padding:8px 0}
 .steprow{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px}
 .seg{display:flex;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:3px}
@@ -184,11 +184,29 @@ nav button.on{color:var(--acc);background:var(--card)}
 <section class="tab" id="tab-set">
   <h2>Einstellungen</h2>
   <div class="card">
-    <label>Körpergewicht (kg) – für Kalorien-Schätzung</label>
-    <input id="setWeight" type="number" inputmode="decimal" value="75">
-    <label>Schnellwahl-Geschwindigkeiten (km/h, mit Komma getrennt, Dezimalpunkt z. B. 2.5)</label>
-    <input id="setPresets" value="1, 2, 3, 4, 5, 6">
-    <div class="chk"><input type="checkbox" id="setVoice" checked><span>Sprachansagen</span></div>
+    <b>Kalorien-Berechnung</b>
+    <div class="row" style="margin-top:4px">
+      <div><label>Geschlecht</label><select id="setSex"><option value="m">männlich</option><option value="w">weiblich</option></select></div>
+      <div><label>Alter (Jahre)</label><input id="setAge" type="number" inputmode="numeric" value="45"></div>
+    </div>
+    <div class="row" style="margin-top:0">
+      <div><label>Gewicht (kg)</label><input id="setWeight" type="number" inputmode="decimal" value="75"></div>
+      <div><label>Größe (cm)</label><input id="setHeight" type="number" inputmode="numeric" value="178"></div>
+    </div>
+    <div class="chk"><input type="checkbox" id="setRest" checked><span>Grundumsatz mitzählen (wie Fitnessuhren). Aus: nur die zusätzlich durchs Gehen verbrannten kcal.</span></div>
+    <div class="mut" id="kcalInfo" style="margin-top:8px"></div>
+    <details style="margin-top:8px"><summary class="mut">Welche Formel wird verwendet?</summary>
+      <div class="mut" style="margin-top:6px">
+        <b>Gehen:</b> ACSM-Gehformel (American College of Sports Medicine):<br>
+        Sauerstoffbedarf = 0,1 × Geschwindigkeit (m/min) ml pro kg und Minute; 1 Liter O₂ ≈ 5 kcal.<br>
+        <b>Grundumsatz:</b> Mifflin-St-Jeor-Formel:<br>
+        Männer: 10 × kg + 6,25 × cm − 5 × Alter + 5<br>
+        Frauen: 10 × kg + 6,25 × cm − 5 × Alter − 161 (kcal pro Tag)<br>
+        Die ACSM-Formel gilt für 3–6 km/h ohne Steigung. Unter 3 km/h ist sie ungenauer.
+      </div>
+    </details>
+    <label style="margin-top:14px">Schnellwahl-Geschwindigkeiten (bis zu 4, mit Komma getrennt, Dezimalpunkt z. B. 2.5)</label>
+    <input id="setPresets" value="1, 2, 3, 4">
     <div class="chk"><input type="checkbox" id="setBeep" checked><span>Signalton bei Phasenwechsel</span></div>
     <div class="chk"><input type="checkbox" id="setAutoRe" checked><span>Bei Verbindungsabbruch automatisch neu verbinden</span></div>
     <div class="chk"><input type="checkbox" id="setShowAll"><span>Beim Verbinden alle Bluetooth-Geräte anzeigen (nur für Diagnose)</span></div>
@@ -257,7 +275,7 @@ const NAMES = {
 /* ---------- Zustand ---------- */
 const S = {
   dev:null, cp:null, ftms:false, control:false, userDisc:false,
-  speed:0, time:0, dist:0, kcal:0, hr:null,
+  speed:0, time:0, dist:0, kcal:0, kcalBand:0, hr:null,
   devTime:false, devDist:false, devKcal:false,
   belt:false,            // Band läuft (laut Gerät oder lokal angenommen)
   paused:false,
@@ -267,7 +285,10 @@ const S = {
   zeroSince:0,
   chars:[]               // alle Characteristics für Diagnose
 };
-let cfg = Object.assign({weight:75, step:0.5, presets:"1, 2, 3, 4, 5, 6", voice:true, beep:true, autoRe:true, showAll:false, uuids:""}, store.get("cfg", {}));
+let cfg0 = Object.assign({weight:75, height:178, age:45, sex:"m", rest:true, step:0.5, presets:"1, 2, 3, 4", voice:false, beep:true, autoRe:true, showAll:false, uuids:""}, store.get("cfg", {}));
+let cfg = cfg0;
+if(cfg.presets === "1, 2, 3, 4, 5, 6") cfg.presets = "1, 2, 3, 4";
+cfg.voice = false;
 
 /* ---------- GATT-Warteschlange ---------- */
 let q = Promise.resolve();
@@ -415,7 +436,7 @@ function parseTreadmill(v){
   if(has(4)) o += 4;                                     // Höhenmeter
   if(has(5)) o += 1;                                     // Pace
   if(has(6)) o += 1;
-  if(has(7)){ const k = v.getUint16(o,true); if(k !== 0xffff){ S.kcal = k; S.devKcal = k>0 || S.devKcal; } o += 5; }
+  if(has(7)){ const k = v.getUint16(o,true); if(k !== 0xffff) S.kcalBand = k; o += 5; }
   if(has(8)){ const h = v.getUint8(o); if(h) S.hr = h; o += 1; }
   if(has(9)) o += 1;
   if(has(10)){ S.time = v.getUint16(o,true); S.devTime = true; o += 2; }
@@ -476,7 +497,6 @@ function parseHnk(v){
   }else if(t === 0x91){
     const run = b[6] === 0xF3;
     if(run !== hnkRun){ hnkRun = run; log("Status: "+(run ? "läuft" : "steht")+"  ("+hex(v)+")"); }
-    if(!run){ S.speed = 0; S.belt = false; }
   }else if(t === 0x95){
     if(Date.now() - hnkStatLog > 15000){ hnkStatLog = Date.now(); log("◀ Stat "+hex(v)); }
   }else{
@@ -485,7 +505,7 @@ function parseHnk(v){
 }
 // Datenkanal FEE7/FEC8: Frames "FA F1 <Typ> ... <Summe>"
 const C_FEC8 = U(0xfec8);
-let fecStatLog = 0, fecLastT = -1, fecSpeed = 0, fecState = null;
+let fecStatLog = 0, fecLastT = -1, fecSpeed = 0, fecState = null, fecLastKcal = -1;
 function parseFec8(v){
   const b = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
   if(b[0] !== 0xFA || b[1] !== 0xF1){ log("◀ fec8 "+hex(v)); return; }
@@ -494,7 +514,7 @@ function parseFec8(v){
     // Status: Byte 6 = Geschwindigkeit (0,1 km/h), Byte 7 = Zustand
     const st = b[7];
     if(st !== fecState){ fecState = st; log("Status "+st.toString(16)+" ("+(st===0 ? "steht" : (st&0xF0)===0xF0 ? "Countdown" : "läuft")+")"); }
-    if(st === 0x00){ S.speed = 0; S.belt = false; fecSpeed = 0; }
+    if(st === 0x00){ S.speed = 0; S.belt = false; fecSpeed = 0; fecLastKcal = -1; }
     else if((st & 0xF0) !== 0xF0 && b[6]){ fecSpeed = b[6]/10; S.speed = fecSpeed; S.belt = true; S.paused = false; }
   }else if(t === 0x22 && b.length >= 9){
     // Bestätigung eines Befehls
@@ -509,6 +529,13 @@ function parseFec8(v){
       if(S.target == null && fecSpeed) S.target = fecSpeed;
     }
     fecLastT = sec;
+    if(b.length >= 9){
+      const kc = (b[7] << 8) | b[8];
+      if(fecLastKcal >= 0 && kc >= fecLastKcal) S.kcalBand += kc - fecLastKcal;
+      else if(fecLastKcal >= 0 && kc < fecLastKcal) S.kcalBand += kc;      // Band hat neu gezählt
+      else if(S.session) S.kcalBand += kc;
+      fecLastKcal = kc;
+    }
     if(Date.now() - fecStatLog > 30000){ fecStatLog = Date.now(); log("◀ Training "+hex(v)); }
   }else if(t === 0x20 && b.length >= 8){
     const mn = b[6]/10, mx = b[7]/10;
@@ -556,7 +583,14 @@ async function cmdStart(){
 }
 async function cmdPause(){
   if(!canCtl()){ needConn(); return; }
-  if(S.proto === "hnk"){ await hnkWrite(HNK_PAUSE); S.paused = true; return; }
+  if(S.proto === "hnk"){
+    // Band kennt keine echte Pause: anhalten, Geschwindigkeit merken, Training läuft weiter
+    if(S.speed > 0 || S.target) S.target = S.target || S.speed;
+    S.paused = true;
+    await hnkWrite(HNK_STOP);
+    say("Pause");
+    return;
+  }
   await ensureControl(); await cpWrite([0x08,0x02]); S.paused = true; }
 async function cmdStop(){
   stopProgram(false);
@@ -594,6 +628,7 @@ function beginSession(){
   if(!S.devTime) S.time = 0;
   if(!S.devDist) S.dist = 0;
   if(!S.devKcal) S.kcal = 0;
+  S.kcalBand = 0;
   lastKm = 0;
   requestWake();
 }
@@ -610,6 +645,7 @@ function endSession(){
   const v = sessionVals();
   S.session = null;
   releaseWake();
+  log("Training beendet: "+fmtTime(v.time)+", "+v.dist.toFixed(2)+" km, "+Math.round(v.kcal)+" kcal berechnet / "+Math.round(S.kcalBand)+" kcal laut Band");
   if(v.time < 30 || v.dist < 0.01) return;
   const h = store.get("hist", []);
   h.unshift({date:s.start, time:Math.round(v.time), dist:+v.dist.toFixed(3), kcal:Math.round(v.kcal)});
@@ -743,6 +779,24 @@ function goalTick(){
   if(cur < val) goalHit = false;
 }
 
+/* ---------- Kalorien ---------- */
+// Grundumsatz nach Mifflin-St Jeor (kcal/Tag)
+function bmr(){
+  const w = cfg.weight, h = cfg.height, a = cfg.age;
+  return 10*w + 6.25*h - 5*a + (cfg.sex === "w" ? -161 : 5);
+}
+// Gehen nach ACSM: netto 0,1 ml O2/kg/min pro m/min, 5 kcal pro Liter O2
+function kcalPerMin(kmh){
+  if(!(kmh > 0)) return 0;
+  const mpm = kmh * 1000 / 60;
+  const net = 0.1 * mpm * cfg.weight / 1000 * 5;
+  return net + (cfg.rest ? bmr() / 1440 : 0);
+}
+function kcalInfo(){
+  const el = $("#kcalInfo"); if(!el) return;
+  el.textContent = "Grundumsatz: "+Math.round(bmr())+" kcal/Tag · bei 3,5 km/h ≈ "+Math.round(kcalPerMin(3.5)*60)+" kcal/h, bei 4 km/h ≈ "+Math.round(kcalPerMin(4)*60)+" kcal/h";
+}
+
 /* ---------- Ticker ---------- */
 let lastKm = 0;
 setInterval(() => {
@@ -752,11 +806,7 @@ setInterval(() => {
     if(!S.devTime) S.time += 1;
     if(!S.devDist) S.dist += S.speed/3600;
   }
-  if(!S.devKcal && S.session){
-    // Gehen: ca. 0,5–0,75 kcal pro kg und km, abhängig vom Tempo
-    const v = sessionVals(), f = S.speed > 6 ? 0.9 : S.speed > 4.5 ? 0.65 : 0.5;
-    S.kcal = S.session.k0 + v.dist * cfg.weight * f;
-  }
+  if(S.session && S.belt && !S.paused) S.kcal += kcalPerMin(S.speed) / 60;
   // Automatisches Sessionende nach 90 s Stillstand
   if(S.session){
     if(S.belt) S.zeroSince = 0;
@@ -790,11 +840,12 @@ function render(){
 }
 let favs = store.get("favs", [3.3, 3.6, 4.0]);
 let favEditMode = false;
-const MAX_FAVS = 6;
+const MAX_FAVS = 4;
+if(favs.length > MAX_FAVS){ favs = favs.slice(0, MAX_FAVS); store.set("favs", favs); }
 const fmt1 = v => v.toFixed(1).replace(".", ",");
 function renderPresets(){
   const q = $("#quick"); q.innerHTML = "";
-  (cfg.presets||"").split(",").map(x=>parseFloat(x.trim())).filter(n=>n>0).slice(0,12).forEach(n=>{
+  (cfg.presets||"").split(",").map(x=>parseFloat(x.trim())).filter(n=>n>0).slice(0,4).forEach(n=>{
     const b = document.createElement("button"); b.textContent = fmt1(n).replace(",0","");
     b.onclick = () => setTarget(n, true);
     q.append(b);
@@ -918,10 +969,7 @@ function beep(n=1, freq=880){
     }
   }catch(e){}
 }
-function say(txt){
-  if(!cfg.voice || !window.speechSynthesis) return;
-  try{ const u = new SpeechSynthesisUtterance(txt); u.lang = "de-DE"; speechSynthesis.speak(u); }catch(e){}
-}
+function say(txt){ /* Sprachausgabe deaktiviert */ }
 let wake = null;
 async function requestWake(){ try{ if("wakeLock" in navigator && !wake){ wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", ()=>{ wake = null; }); } }catch(e){} }
 function releaseWake(){ try{ wake && wake.release(); }catch(e){} wake = null; }
@@ -929,15 +977,17 @@ document.addEventListener("visibilitychange", () => { if(document.visibilityStat
 
 /* ---------- Einstellungen ---------- */
 function loadCfgUI(){
-  $("#setWeight").value = cfg.weight; $("#setPresets").value = cfg.presets;
-  $("#setVoice").checked = cfg.voice; $("#setBeep").checked = cfg.beep; $("#setAutoRe").checked = cfg.autoRe; $("#setShowAll").checked = cfg.showAll; $("#setUuids").value = cfg.uuids;
+  $("#setWeight").value = cfg.weight; $("#setHeight").value = cfg.height; $("#setAge").value = cfg.age; $("#setSex").value = cfg.sex; $("#setRest").checked = cfg.rest;
+  $("#setPresets").value = cfg.presets; kcalInfo();
+  $("#setBeep").checked = cfg.beep; $("#setAutoRe").checked = cfg.autoRe; $("#setShowAll").checked = cfg.showAll; $("#setUuids").value = cfg.uuids;
 }
 function saveCfg(){
-  cfg = Object.assign(cfg, {weight:parseFloat($("#setWeight").value)||75, presets:$("#setPresets").value,
-         voice:$("#setVoice").checked, beep:$("#setBeep").checked, autoRe:$("#setAutoRe").checked, showAll:$("#setShowAll").checked, uuids:$("#setUuids").value});
-  store.set("cfg", cfg); renderPresets();
+  cfg = Object.assign(cfg, {weight:parseFloat($("#setWeight").value)||75, height:parseFloat($("#setHeight").value)||175,
+         age:parseFloat($("#setAge").value)||40, sex:$("#setSex").value, rest:$("#setRest").checked, presets:$("#setPresets").value,
+         voice:false, beep:$("#setBeep").checked, autoRe:$("#setAutoRe").checked, showAll:$("#setShowAll").checked, uuids:$("#setUuids").value});
+  store.set("cfg", cfg); renderPresets(); kcalInfo();
 }
-["#setWeight","#setPresets","#setVoice","#setBeep","#setAutoRe","#setShowAll","#setUuids"].forEach(s=>$(s).addEventListener("change", saveCfg));
+["#setWeight","#setHeight","#setAge","#setSex","#setRest","#setPresets","#setBeep","#setAutoRe","#setShowAll","#setUuids"].forEach(s=>$(s).addEventListener("change", saveCfg));
 
 /* ---------- Tabs & Buttons ---------- */
 function showTab(t){
@@ -949,7 +999,7 @@ function showTab(t){
 document.querySelectorAll("nav button").forEach(b=>b.onclick = () => showTab(b.dataset.tab));
 $("#btnConnect").onclick = () => (S.dev && S.dev.gatt.connected) ? disconnect() : connect();
 $("#btnStart").onclick = () => cmdStart();
-$("#btnPause").onclick = () => S.paused ? cmdStart() : cmdPause();
+$("#btnPause").onclick = () => { if(S.paused){ say("Weiter"); cmdStart(); } else cmdPause(); };
 $("#btnStop").onclick = () => cmdStop();
 $("#spPlus").onclick = () => setTarget((S.target ?? S.speed) + cfg.step);
 $("#spMinus").onclick = () => setTarget((S.target ?? S.speed) - cfg.step);
