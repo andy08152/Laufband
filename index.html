@@ -235,7 +235,7 @@ const OPTIONAL = [
 const NAMES = {
   [U(0x1826)]:"Fitness Machine (FTMS)", [U(0x180a)]:"Geräte-Info", [U(0x180d)]:"Herzfrequenz", [U(0x180f)]:"Batterie",
   [U(0x1814)]:"Laufsensor (RSC)", [U(0x2acd)]:"Treadmill Data", [U(0x2ad9)]:"Control Point", [U(0x2ad4)]:"Speed Range",
-  [U(0x2ada)]:"Machine Status", [U(0x2ad3)]:"Training Status", [U(0x2acc)]:"FTMS Features",
+  [U(0x2ada)]:"Machine Status", [U(0xffb0)]:"Lijiujia-Steuerung", [U(0xffb1)]:"LJJ Daten", [U(0xffb2)]:"LJJ Befehle", [U(0x2ad3)]:"Training Status", [U(0x2acc)]:"FTMS Features",
   [U(0x2a29)]:"Hersteller", [U(0x2a24)]:"Modell", [U(0x2a26)]:"Firmware", [U(0x2a25)]:"Seriennummer"
 };
 
@@ -290,7 +290,8 @@ async function setup(){
   setStatus("Verbinde mit "+(dev.name||"Gerät")+" …","busy");
   const server = await dev.gatt.connect();
   log("Verbunden: "+(dev.name||"(ohne Namen)")+"  id="+dev.id);
-  S.ftms = false; S.control = false; S.cp = null; S.chars = [];
+  S.ftms = false; S.control = false; S.cp = null; S.hw = null; S.proto = null; S.chars = [];
+  S.devTime = S.devDist = S.devKcal = false; ftmsHint = false;
   let services = [];
   try{ services = await server.getPrimaryServices(); }catch(e){ log("Keine Services lesbar: "+e.message); }
 
@@ -322,7 +323,18 @@ async function setup(){
     }
   }
 
-  if(S.ftms){
+  S.hw = S.chars.find(c=>c.uuid===C_FFB2) || null;
+  if(S.hw){
+    // Lijiujia / HNK-Protokoll (Kanal "LJJ-sports")
+    S.proto = "hnk";
+    $("#warnProto").style.display = "none";
+    await hnkWrite([0x88]);
+    await sleep(500);
+    await hnkWrite(HNK_READY);
+    await sleep(500);
+    log("Lijiujia-Steuerung bereit.");
+  }else if(S.ftms){
+    S.proto = "ftms";
     S.cp = S.chars.find(c=>c.uuid===C_CP) || null;
     const sr = S.chars.find(c=>c.uuid===C_SR);
     if(sr){
@@ -341,12 +353,12 @@ async function setup(){
     w.style.display = "block";
   }
   renderPresets();
-  setStatus((dev.name||"Laufband")+(S.ftms ? " · FTMS" : " · unbekanntes Protokoll"),"on");
+  setStatus((dev.name||"Laufband")+(S.proto==="hnk" ? " · Steuerung aktiv" : S.ftms ? " · FTMS" : " · unbekanntes Protokoll"),"on");
 }
 
 function onDisconnected(){
   log("Verbindung getrennt.");
-  S.cp = null; S.control = false; S.belt = false;
+  S.cp = null; S.hw = null; S.proto = null; S.control = false; S.belt = false;
   setStatus("Verbindung getrennt");
   if(S.userDisc || !cfg.autoRe) return;
   say("Verbindung verloren");
@@ -368,6 +380,7 @@ function disconnect(){
 
 /* ---------- Eingehende Daten ---------- */
 function onNotify(c, v){
+  if(c.uuid === C_FFB1) return parseHnk(v);
   if(c.uuid === C_TD) return parseTreadmill(v);
   if(c.uuid === C_CP) return parseCpResp(v);
   if(c.uuid === C_MS){ log("Machine Status: "+hex(v)); return; }
@@ -402,8 +415,61 @@ function parseCpResp(v){
   const op = v.getUint8(1), r = v.getUint8(2);
   log("Antwort "+(OPS[op]||op)+": "+(RES[r]||r));
   if(op === 0 && r === 1) S.control = true;
-  if(r === 5) S.control = false;
+  if(r === 5){
+    S.control = false;
+    if(!ftmsHint){
+      ftmsHint = true;
+      const w = $("#warnProto");
+      w.innerHTML = "Über diesen Kanal (<b>"+((S.dev&&S.dev.name)||"FTMS")+"</b>) lässt das Band keine Steuerung zu. Bitte auf <b>Trennen</b> tippen, dann <b>Verbinden</b> und <b>LJJ-sports</b> auswählen.";
+      w.style.display = "block";
+    }
+  }
 }
+
+/* ---------- Lijiujia / HNK-Protokoll ---------- */
+const C_FFB1 = U(0xffb1), C_FFB2 = U(0xffb2);
+const HNK_READY = [0x07,0x00,0x00,0x00,0x00,0x2C,0x09];
+const HNK_PAUSE = [0x05,0x00,0x00,0x00,0x00,0x2A,0x07];
+const HNK_START = [0xFA,0xEF,0x11,0x00,0x00,0x00,0x00,0xF3,0x04];
+const HNK_STOP  = [0xFA,0xEF,0x11,0x00,0x00,0x00,0x00,0xF4,0x05];
+const hnkSpeed = kmh => { const sp = Math.round(kmh*10) & 0xff, inc = 0; return [0xFA,0xEF,0x11,0x00,inc,0x00,sp,0x11,(inc+17+sp+17) & 0xff]; };
+const sleep = ms => new Promise(r=>setTimeout(r, ms));
+let ftmsHint = false, hnkLast = 0, hnkRun = null, hnkStatLog = 0;
+async function hnkWrite(bytes){
+  if(!S.hw){ log("Kein Steuerkanal."); return false; }
+  return gatt(async () => {
+    const d = new Uint8Array(bytes);
+    log("▶ FFB2 "+Array.from(d).map(b=>b.toString(16).padStart(2,"0")).join(" "));
+    try{
+      if(S.hw.writeValueWithoutResponse) await S.hw.writeValueWithoutResponse(d);
+      else await S.hw.writeValue(d);
+      hnkLast = Date.now();
+      return true;
+    }catch(e){ log("Schreibfehler: "+e.message); return false; }
+  });
+}
+function parseHnk(v){
+  const b = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+  if(b[0] !== 0xFA || b[1] !== 0xEF){ log("◀ FFB1 "+hex(v)); return; }
+  const t = b[2];
+  if(t === 0x92){
+    S.speed = (b[6]||0)/10;
+    S.belt = S.speed > 0.05;
+    if(S.belt) S.paused = false;
+    if(S.target == null && S.belt) S.target = S.speed;
+  }else if(t === 0x91){
+    const run = b[6] === 0xF3;
+    if(run !== hnkRun){ hnkRun = run; log("Status: "+(run ? "läuft" : "steht")+"  ("+hex(v)+")"); }
+    if(!run){ S.speed = 0; S.belt = false; }
+  }else if(t === 0x95){
+    if(Date.now() - hnkStatLog > 15000){ hnkStatLog = Date.now(); log("◀ Stat "+hex(v)); }
+  }else{
+    log("◀ FFB1 "+hex(v));
+  }
+}
+// Verbindung wach halten (Band trennt sonst nach längerer Ruhe)
+setInterval(() => { if(S.proto === "hnk" && S.hw && Date.now() - hnkLast > 30000) hnkWrite(HNK_READY); }, 5000);
+const canCtl = () => S.proto === "hnk" ? !!S.hw : !!S.cp;
 
 /* ---------- Befehle (FTMS) ---------- */
 async function cpWrite(bytes){
@@ -422,21 +488,33 @@ async function requestControl(){ await cpWrite([0x00]); await new Promise(r=>set
 async function ensureControl(){ if(!S.control) await requestControl(); }
 
 async function cmdStart(){
-  if(!S.cp){ needConn(); return; }
+  if(!canCtl()){ needConn(); return; }
+  if(S.proto === "hnk"){
+    await hnkWrite(HNK_START);
+    S.paused = false;
+    beginSession();
+    if(S.target){ setTimeout(()=>sendSpeed(S.target), 2500); }
+    return;
+  }
   await ensureControl();
   await cpWrite([0x07]);
   S.paused = false;
   beginSession();
   if(S.target){ setTimeout(()=>sendSpeed(S.target), 1500); }
 }
-async function cmdPause(){ if(!S.cp){ needConn(); return; } await ensureControl(); await cpWrite([0x08,0x02]); S.paused = true; }
+async function cmdPause(){
+  if(!canCtl()){ needConn(); return; }
+  if(S.proto === "hnk"){ await hnkWrite(HNK_PAUSE); S.paused = true; return; }
+  await ensureControl(); await cpWrite([0x08,0x02]); S.paused = true; }
 async function cmdStop(){
   stopProgram(false);
-  if(S.cp){ await ensureControl(); await cpWrite([0x08,0x01]); }
+  if(S.proto === "hnk" && S.hw){ await hnkWrite(HNK_STOP); }
+  else if(S.cp){ await ensureControl(); await cpWrite([0x08,0x01]); }
   S.paused = false;
   endSession();
 }
 async function sendSpeed(kmh){
+  if(S.proto === "hnk"){ if(S.hw) await hnkWrite(hnkSpeed(kmh)); return; }
   if(!S.cp) return;
   await ensureControl();
   const v = Math.round(kmh*100);
@@ -444,7 +522,7 @@ async function sendSpeed(kmh){
 }
 function needConn(){
   if(!S.dev || !S.dev.gatt.connected) alert("Bitte zuerst mit dem Laufband verbinden.");
-  else alert("Dieses Band unterstützt die Standard-Steuerung nicht. Bitte Diagnose-Daten an Claude schicken (Mehr → Diagnose).");
+  else alert("Über diesen Kanal ist keine Steuerung möglich. Bitte trennen und mit „LJJ-sports“ verbinden.");
 }
 
 let spTimer = null;
@@ -550,7 +628,7 @@ $("#pSave").onclick = () => {
 
 let P = null; // laufendes Programm
 async function startProgram(name, segs){
-  if(!S.cp){ needConn(); return; }
+  if(!canCtl()){ needConn(); return; }
   if(!segs.length) return;
   P = {name, segs, idx:0, left:segs[0].min*60, total:progDur(segs)*60, done:0};
   $("#progRun").style.display = "block";
