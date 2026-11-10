@@ -43,8 +43,17 @@ button.bad{background:var(--bad);border-color:var(--bad);color:#fff;font-weight:
 .speed .tgt{text-align:center}
 .speed .tgt .v{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
 .speed .tgt .l{font-size:12px;color:var(--mut)}
-.presets{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:10px}
-.presets button{padding:12px 0;font-weight:600}
+.presets{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.presets button{padding:16px 0;font-weight:700;font-size:20px}
+.presets button.edit{border-color:var(--bad);color:var(--bad)}
+.quick{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:10px}
+.quick button{padding:12px 0;font-weight:600}
+.presets .empty{grid-column:1/-1;color:var(--mut);font-size:14px;padding:8px 0}
+.steprow{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px}
+.seg{display:flex;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:3px}
+.seg button{border:0;background:none;padding:8px 16px;border-radius:9px;color:var(--mut);font-weight:600}
+.seg button.on{background:var(--acc);color:#111}
+.speed .tgt{cursor:pointer}
 input,select,textarea{font:inherit;color:var(--fg);background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;width:100%}
 textarea{min-height:130px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px}
 label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
@@ -109,10 +118,18 @@ nav button.on{color:var(--acc);background:var(--card)}
 
   <div class="speed">
     <button id="spMinus">−</button>
-    <div class="tgt"><div class="v"><span id="tgtSpeed">–</span> km/h</div><div class="l">Zielgeschwindigkeit</div></div>
+    <div class="tgt"><div class="v"><span id="tgtSpeed">–</span> km/h</div><div class="l">Ziel · zum Eintippen antippen</div></div>
     <button id="spPlus">+</button>
   </div>
+  <div class="quick" id="quick"></div>
+  <div class="steprow"><span class="mut">Schritt +/−</span>
+    <div class="seg" id="stepSeg"><button data-step="0.1">0,1</button><button data-step="0.5">0,5</button><button data-step="1">1,0</button></div>
+    <span class="mut">km/h</span></div>
+
+  <h2>Favoriten</h2>
   <div class="presets" id="presets"></div>
+  <div class="row"><button id="favAdd">★ Aktuelle speichern</button><button id="favEdit">Bearbeiten</button></div>
+  <div class="mut" style="margin-top:6px">Tippen = Geschwindigkeit einstellen. Steht das Band, startet es direkt mit dieser Geschwindigkeit.</div>
 
   <h2>Ziel</h2>
   <div class="card">
@@ -169,9 +186,7 @@ nav button.on{color:var(--acc);background:var(--card)}
   <div class="card">
     <label>Körpergewicht (kg) – für Kalorien-Schätzung</label>
     <input id="setWeight" type="number" inputmode="decimal" value="75">
-    <label>Schrittweite für + / − (km/h)</label>
-    <select id="setStep"><option>0.1</option><option>0.2</option><option selected>0.5</option><option>1</option></select>
-    <label>Schnellwahl-Geschwindigkeiten (km/h, mit Komma getrennt)</label>
+    <label>Schnellwahl-Geschwindigkeiten (km/h, mit Komma getrennt, Dezimalpunkt z. B. 2.5)</label>
     <input id="setPresets" value="1, 2, 3, 4, 5, 6">
     <div class="chk"><input type="checkbox" id="setVoice" checked><span>Sprachansagen</span></div>
     <div class="chk"><input type="checkbox" id="setBeep" checked><span>Signalton bei Phasenwechsel</span></div>
@@ -205,7 +220,7 @@ nav button.on{color:var(--acc);background:var(--card)}
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
-const U = n => (typeof n === "number" ? BluetoothUUID.canonicalUUID(n) : n.toLowerCase());
+const U = n => (typeof n === "number" ? "0000"+n.toString(16).padStart(4,"0")+"-0000-1000-8000-00805f9b34fb" : n.toLowerCase());
 
 /* ---------- Speicher (robust) ---------- */
 const store = {
@@ -381,6 +396,7 @@ function disconnect(){
 /* ---------- Eingehende Daten ---------- */
 function onNotify(c, v){
   if(c.uuid === C_FFB1) return parseHnk(v);
+  if(c.uuid === C_FEC8) return parseFec8(v);
   if(c.uuid === C_TD) return parseTreadmill(v);
   if(c.uuid === C_CP) return parseCpResp(v);
   if(c.uuid === C_MS){ log("Machine Status: "+hex(v)); return; }
@@ -467,6 +483,41 @@ function parseHnk(v){
     log("◀ FFB1 "+hex(v));
   }
 }
+// Datenkanal FEE7/FEC8: Frames "FA F1 <Typ> ... <Summe>"
+const C_FEC8 = U(0xfec8);
+let fecStatLog = 0, fecLastT = -1, fecSpeed = 0, fecState = null;
+function parseFec8(v){
+  const b = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+  if(b[0] !== 0xFA || b[1] !== 0xF1){ log("◀ fec8 "+hex(v)); return; }
+  const t = b[2];
+  if(t === 0x21 && b.length >= 9){
+    // Status: Byte 6 = Geschwindigkeit (0,1 km/h), Byte 7 = Zustand
+    const st = b[7];
+    if(st !== fecState){ fecState = st; log("Status "+st.toString(16)+" ("+(st===0 ? "steht" : (st&0xF0)===0xF0 ? "Countdown" : "läuft")+")"); }
+    if(st === 0x00){ S.speed = 0; S.belt = false; fecSpeed = 0; }
+    else if((st & 0xF0) !== 0xF0 && b[6]){ fecSpeed = b[6]/10; S.speed = fecSpeed; S.belt = true; S.paused = false; }
+  }else if(t === 0x22 && b.length >= 9){
+    // Bestätigung eines Befehls
+    if(b[7] === 0x11 && b[6]){ fecSpeed = b[6]/10; if(S.belt) S.speed = fecSpeed; }
+    else if(b[7] === 0xF4){ S.speed = 0; S.belt = false; fecSpeed = 0; }
+  }else if(t === 0x23 && b.length >= 6){
+    // Trainingsdaten: Byte 3-4 = Sekunden
+    const sec = (b[3] << 8) | b[4];
+    if(sec !== fecLastT && sec > 0){
+      S.belt = true; S.paused = false;
+      if(fecSpeed) S.speed = fecSpeed;
+      if(S.target == null && fecSpeed) S.target = fecSpeed;
+    }
+    fecLastT = sec;
+    if(Date.now() - fecStatLog > 30000){ fecStatLog = Date.now(); log("◀ Training "+hex(v)); }
+  }else if(t === 0x20 && b.length >= 8){
+    const mn = b[6]/10, mx = b[7]/10;
+    if(mn > 0 && mx > mn){ S.range = {min:mn, max:mx, inc:0.1}; log("Geschwindigkeitsbereich: "+mn+" – "+mx+" km/h"); }
+  }else if(t !== 0x21){
+    log("◀ fec8 "+hex(v));
+  }
+}
+
 // Verbindung wach halten (Band trennt sonst nach längerer Ruhe)
 setInterval(() => { if(S.proto === "hnk" && S.hw && Date.now() - hnkLast > 30000) hnkWrite(HNK_READY); }, 5000);
 const canCtl = () => S.proto === "hnk" ? !!S.hw : !!S.cp;
@@ -493,7 +544,8 @@ async function cmdStart(){
     await hnkWrite(HNK_START);
     S.paused = false;
     beginSession();
-    if(S.target){ setTimeout(()=>sendSpeed(S.target), 2500); }
+    // Band zählt nach dem Start ca. 3 s herunter – Zielgeschwindigkeit danach sicherheitshalber zweimal senden
+    if(S.target){ const t = S.target; setTimeout(()=>sendSpeed(S.target ?? t), 2500); setTimeout(()=>{ if(S.target === t) sendSpeed(t); }, 5000); }
     return;
   }
   await ensureControl();
@@ -736,14 +788,66 @@ function render(){
   $("#btnPause").textContent = S.paused ? "▶ Weiter" : "❚❚ Pause";
   if(S.target != null) $("#tgtSpeed").textContent = S.target.toFixed(1);
 }
+let favs = store.get("favs", [3.3, 3.6, 4.0]);
+let favEditMode = false;
+const MAX_FAVS = 6;
+const fmt1 = v => v.toFixed(1).replace(".", ",");
 function renderPresets(){
-  const el = $("#presets"); el.innerHTML = "";
-  cfg.presets.split(",").map(s=>parseFloat(s.trim())).filter(n=>n>0).slice(0,12).forEach(n=>{
-    const b = document.createElement("button"); b.textContent = n;
+  const q = $("#quick"); q.innerHTML = "";
+  (cfg.presets||"").split(",").map(x=>parseFloat(x.trim())).filter(n=>n>0).slice(0,12).forEach(n=>{
+    const b = document.createElement("button"); b.textContent = fmt1(n).replace(",0","");
     b.onclick = () => setTarget(n, true);
+    q.append(b);
+  });
+  const el = $("#presets"); el.innerHTML = "";
+  favs.forEach((n, i) => {
+    const b = document.createElement("button");
+    b.textContent = favEditMode ? "✕ "+fmt1(n) : fmt1(n);
+    if(favEditMode) b.className = "edit";
+    b.onclick = () => favEditMode ? removeFav(i) : useFav(n);
     el.append(b);
   });
+  if(!favs.length){ const d = document.createElement("div"); d.className = "empty"; d.textContent = "Noch keine Favoriten – Geschwindigkeit einstellen und „★ Aktuelle speichern“ tippen."; el.append(d); }
+  $("#favEdit").textContent = favEditMode ? "Fertig" : "Bearbeiten";
+  $("#favAdd").disabled = favs.length >= MAX_FAVS;
+  $("#favAdd").textContent = favs.length >= MAX_FAVS ? "Max. "+MAX_FAVS+" Favoriten" : "★ Aktuelle speichern";
+  document.querySelectorAll("#stepSeg button").forEach(b => b.classList.toggle("on", parseFloat(b.dataset.step) === cfg.step));
 }
+async function useFav(n){
+  if(S.belt){ setTarget(n, true); return; }
+  if(!canCtl()){ needConn(); return; }
+  S.target = n; $("#tgtSpeed").textContent = n.toFixed(1);
+  say("Start mit "+fmtKmh(n));
+  await cmdStart();               // cmdStart setzt nach dem Anlaufen die Zielgeschwindigkeit
+}
+function addFav(){
+  const v = S.target ?? (S.speed > 0 ? S.speed : null);
+  if(v == null){ alert("Bitte zuerst eine Geschwindigkeit einstellen (+/− oder auf die Zielgeschwindigkeit tippen)."); return; }
+  const r = Math.round(v*10)/10;
+  if(favs.includes(r)){ alert(fmt1(r)+" km/h ist schon ein Favorit."); return; }
+  if(favs.length >= MAX_FAVS) return;
+  favs.push(r); favs.sort((a,b)=>a-b);
+  store.set("favs", favs); renderPresets();
+}
+function removeFav(i){
+  favs.splice(i, 1); store.set("favs", favs);
+  if(!favs.length) favEditMode = false;
+  renderPresets();
+}
+$("#favAdd").onclick = addFav;
+$("#favEdit").onclick = () => { favEditMode = !favEditMode; renderPresets(); };
+document.querySelectorAll("#stepSeg button").forEach(b => b.onclick = () => {
+  cfg.step = parseFloat(b.dataset.step); store.set("cfg", cfg); renderPresets();
+});
+document.querySelector(".speed .tgt").onclick = () => {
+  const cur = S.target ?? S.speed ?? 3;
+  const inp = prompt("Geschwindigkeit in km/h ("+fmt1(S.range.min)+" – "+fmt1(S.range.max)+"):", fmt1(cur));
+  if(inp == null) return;
+  const v = parseFloat(inp.replace(",", "."));
+  if(!(v > 0)) return;
+  if(S.belt) setTarget(v, true);
+  else { const r = S.range; S.target = Math.min(r.max, Math.max(r.min, Math.round(v*10)/10)); $("#tgtSpeed").textContent = S.target.toFixed(1); }
+};
 function renderHist(){
   const h = store.get("hist", []);
   const tb = $("#histBody"); tb.innerHTML = "";
@@ -825,15 +929,15 @@ document.addEventListener("visibilitychange", () => { if(document.visibilityStat
 
 /* ---------- Einstellungen ---------- */
 function loadCfgUI(){
-  $("#setWeight").value = cfg.weight; $("#setStep").value = String(cfg.step); $("#setPresets").value = cfg.presets;
+  $("#setWeight").value = cfg.weight; $("#setPresets").value = cfg.presets;
   $("#setVoice").checked = cfg.voice; $("#setBeep").checked = cfg.beep; $("#setAutoRe").checked = cfg.autoRe; $("#setShowAll").checked = cfg.showAll; $("#setUuids").value = cfg.uuids;
 }
 function saveCfg(){
-  cfg = {weight:parseFloat($("#setWeight").value)||75, step:parseFloat($("#setStep").value)||0.5, presets:$("#setPresets").value,
-         voice:$("#setVoice").checked, beep:$("#setBeep").checked, autoRe:$("#setAutoRe").checked, showAll:$("#setShowAll").checked, uuids:$("#setUuids").value};
+  cfg = Object.assign(cfg, {weight:parseFloat($("#setWeight").value)||75, presets:$("#setPresets").value,
+         voice:$("#setVoice").checked, beep:$("#setBeep").checked, autoRe:$("#setAutoRe").checked, showAll:$("#setShowAll").checked, uuids:$("#setUuids").value});
   store.set("cfg", cfg); renderPresets();
 }
-["#setWeight","#setStep","#setPresets","#setVoice","#setBeep","#setAutoRe","#setShowAll","#setUuids"].forEach(s=>$(s).addEventListener("change", saveCfg));
+["#setWeight","#setPresets","#setVoice","#setBeep","#setAutoRe","#setShowAll","#setUuids"].forEach(s=>$(s).addEventListener("change", saveCfg));
 
 /* ---------- Tabs & Buttons ---------- */
 function showTab(t){
