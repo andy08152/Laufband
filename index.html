@@ -1,0 +1,787 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Laufband</title>
+<style>
+:root{
+  --bg:#0f1115;--card:#1a1d24;--card2:#232731;--fg:#eef0f4;--mut:#8b93a3;
+  --acc:#ff7a1a;--ok:#2ecc71;--bad:#ff4d4d;--warn:#f5c542;--line:#2c313c;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+body{padding:12px 16px calc(84px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto}
+h2{font-size:15px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin:20px 0 8px}
+header{display:flex;align-items:center;gap:10px}
+header .dot{width:12px;height:12px;border-radius:50%;background:var(--bad);flex:none}
+header .dot.on{background:var(--ok)}
+header .dot.busy{background:var(--warn)}
+#status{flex:1;font-size:14px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button{font:inherit;color:var(--fg);background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer;touch-action:manipulation}
+button:active{transform:scale(.97)}
+button:disabled{opacity:.4}
+button.acc{background:var(--acc);border-color:var(--acc);color:#111;font-weight:700}
+button.ok{background:var(--ok);border-color:var(--ok);color:#06210f;font-weight:700}
+button.bad{background:var(--bad);border-color:var(--bad);color:#fff;font-weight:800}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.m{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px 14px}
+.m .l{font-size:13px;color:var(--mut)}
+.m .v{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.m .v small{font-size:15px;color:var(--mut);font-weight:500;margin-left:4px}
+.m.big{grid-column:1/-1;text-align:center}
+.m.big .v{font-size:64px;color:var(--acc)}
+.row{display:flex;gap:10px;margin-top:10px}
+.row>*{flex:1}
+.ctl button{padding:18px 10px;font-size:18px}
+#btnStop{font-size:22px;padding:22px}
+.speed{display:grid;grid-template-columns:72px 1fr 72px;gap:10px;align-items:center;margin-top:10px}
+.speed button{font-size:32px;padding:10px 0;font-weight:700}
+.speed .tgt{text-align:center}
+.speed .tgt .v{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
+.speed .tgt .l{font-size:12px;color:var(--mut)}
+.presets{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:10px}
+.presets button{padding:12px 0;font-weight:600}
+input,select,textarea{font:inherit;color:var(--fg);background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;width:100%}
+textarea{min-height:130px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+.prog{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.prog:last-child{border-bottom:0}
+.prog .n{font-weight:600}
+.prog .d{font-size:13px;color:var(--mut)}
+.prog button{padding:8px 12px;flex:none}
+#progRun{display:none;margin-top:12px;border-color:var(--acc)}
+#progRun .bar{height:8px;background:var(--card2);border-radius:4px;overflow:hidden;margin-top:8px}
+#progRun .bar i{display:block;height:100%;background:var(--acc);width:0}
+.mut{color:var(--mut);font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+td,th{padding:8px 4px;border-bottom:1px solid var(--line);text-align:right}
+td:first-child,th:first-child{text-align:left}
+th{color:var(--mut);font-weight:500}
+#log{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:320px;overflow:auto;background:#0a0b0e;border-radius:12px;padding:10px;margin-top:8px}
+#svcs{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:pre-wrap;word-break:break-all}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:#0b0d11ee;border-top:1px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom));backdrop-filter:blur(8px)}
+nav button{flex:1;background:none;border:0;border-radius:10px;padding:10px 4px;font-size:14px;color:var(--mut)}
+nav button.on{color:var(--acc);background:var(--card)}
+.tab{display:none}.tab.on{display:block}
+.warn{background:#3a2a00;border:1px solid #6b5200;color:#ffd970;border-radius:12px;padding:10px 12px;font-size:14px;margin-top:10px;display:none}
+.chk{display:flex;align-items:center;gap:10px;margin-top:10px}
+.chk input{width:22px;height:22px}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="dot" id="dot"></span>
+  <span id="status">Nicht verbunden</span>
+  <button id="btnConnect" class="acc">Verbinden</button>
+</header>
+<div class="warn" id="warnBt"></div>
+<div class="warn" id="warnProto"></div>
+
+<!-- ============ STEUERUNG ============ -->
+<section class="tab on" id="tab-ctl">
+  <div class="metrics">
+    <div class="m big"><div class="l">Geschwindigkeit</div><div class="v"><span id="mSpeed">0.0</span><small>km/h</small></div></div>
+    <div class="m"><div class="l">Zeit</div><div class="v" id="mTime">0:00</div></div>
+    <div class="m"><div class="l">Distanz</div><div class="v"><span id="mDist">0.00</span><small>km</small></div></div>
+    <div class="m"><div class="l">Kalorien</div><div class="v"><span id="mKcal">0</span><small>kcal</small></div></div>
+    <div class="m"><div class="l" id="mExtraL">Ø Tempo</div><div class="v" id="mExtra">–</div></div>
+  </div>
+
+  <div class="card" id="progRun">
+    <div style="display:flex;justify-content:space-between;gap:8px">
+      <b id="prName">Programm</b><span class="mut" id="prLeft"></span>
+    </div>
+    <div id="prSeg" class="mut" style="margin-top:4px"></div>
+    <div class="bar"><i id="prBar"></i></div>
+    <div class="row"><button id="prSkip">Phase überspringen</button><button id="prAbort">Programm beenden</button></div>
+  </div>
+
+  <div class="row ctl">
+    <button id="btnStart" class="ok">▶ Start</button>
+    <button id="btnPause">❚❚ Pause</button>
+  </div>
+  <div class="row"><button id="btnStop" class="bad">■ STOPP</button></div>
+
+  <div class="speed">
+    <button id="spMinus">−</button>
+    <div class="tgt"><div class="v"><span id="tgtSpeed">–</span> km/h</div><div class="l">Zielgeschwindigkeit</div></div>
+    <button id="spPlus">+</button>
+  </div>
+  <div class="presets" id="presets"></div>
+
+  <h2>Ziel</h2>
+  <div class="card">
+    <div class="row" style="margin-top:0">
+      <select id="goalType">
+        <option value="none">Kein Ziel</option>
+        <option value="time">Zeit (Minuten)</option>
+        <option value="dist">Distanz (km)</option>
+        <option value="kcal">Kalorien (kcal)</option>
+      </select>
+      <input id="goalVal" type="number" inputmode="decimal" step="any" placeholder="Wert">
+    </div>
+    <div class="mut" id="goalInfo" style="margin-top:8px">Bei Erreichen des Ziels hält das Band automatisch an.</div>
+  </div>
+</section>
+
+<!-- ============ PROGRAMME ============ -->
+<section class="tab" id="tab-prog">
+  <h2>Programme</h2>
+  <div class="card" id="progList"></div>
+
+  <h2>Eigenes Programm</h2>
+  <div class="card">
+    <label>Name</label>
+    <input id="pName" placeholder="z. B. Morgenrunde">
+    <label>Phasen: eine pro Zeile <i>Minuten Geschwindigkeit</i></label>
+    <textarea id="pText" placeholder="3 2.5
+6x: 2 4.5; 1 3
+3 2.5"></textarea>
+    <div class="mut" style="margin-top:6px">„6x: 2 4.5; 1 3“ bedeutet: 6-mal (2 Min. mit 4,5 km/h, dann 1 Min. mit 3 km/h).</div>
+    <div class="row"><button id="pSave" class="acc">Speichern</button></div>
+  </div>
+</section>
+
+<!-- ============ VERLAUF ============ -->
+<section class="tab" id="tab-hist">
+  <h2>Statistik</h2>
+  <div class="metrics" style="margin-top:0">
+    <div class="m"><div class="l">Heute</div><div class="v"><span id="sToday">0.00</span><small>km</small></div></div>
+    <div class="m"><div class="l">Letzte 7 Tage</div><div class="v"><span id="sWeek">0.00</span><small>km</small></div></div>
+    <div class="m"><div class="l">Gesamt</div><div class="v"><span id="sAll">0</span><small>km</small></div></div>
+    <div class="m"><div class="l">Einheiten</div><div class="v" id="sCount">0</div></div>
+  </div>
+  <h2>Trainings</h2>
+  <div class="card">
+    <table><thead><tr><th>Datum</th><th>Dauer</th><th>km</th><th>kcal</th><th>Ø km/h</th></tr></thead><tbody id="histBody"></tbody></table>
+    <div class="row"><button id="btnCsv">CSV exportieren</button><button id="btnClear">Verlauf löschen</button></div>
+  </div>
+</section>
+
+<!-- ============ EINSTELLUNGEN / DIAGNOSE ============ -->
+<section class="tab" id="tab-set">
+  <h2>Einstellungen</h2>
+  <div class="card">
+    <label>Körpergewicht (kg) – für Kalorien-Schätzung</label>
+    <input id="setWeight" type="number" inputmode="decimal" value="75">
+    <label>Schrittweite für + / − (km/h)</label>
+    <select id="setStep"><option>0.1</option><option>0.2</option><option selected>0.5</option><option>1</option></select>
+    <label>Schnellwahl-Geschwindigkeiten (km/h, mit Komma getrennt)</label>
+    <input id="setPresets" value="1, 2, 3, 4, 5, 6">
+    <div class="chk"><input type="checkbox" id="setVoice" checked><span>Sprachansagen</span></div>
+    <div class="chk"><input type="checkbox" id="setBeep" checked><span>Signalton bei Phasenwechsel</span></div>
+    <div class="chk"><input type="checkbox" id="setAutoRe" checked><span>Bei Verbindungsabbruch automatisch neu verbinden</span></div>
+    <div class="chk"><input type="checkbox" id="setShowAll"><span>Beim Verbinden alle Bluetooth-Geräte anzeigen (nur für Diagnose)</span></div>
+  </div>
+
+  <h2>Diagnose</h2>
+  <div class="card">
+    <div class="mut">Wenn die Steuerung nicht funktioniert: verbinden, dann hier Screenshots von <b>Services</b> und <b>Log</b> machen und an Claude schicken. Am besten mit der Original-Fernbedienung bzw. den Tasten am Band einmal starten, Geschwindigkeit ändern und stoppen, während das Log läuft.</div>
+    <label>Zusätzliche Service-UUIDs (optional, mit Komma getrennt, wirkt beim nächsten Verbinden)</label>
+    <input id="setUuids" placeholder="z. B. 0000fff0-0000-1000-8000-00805f9b34fb">
+    <h2 style="margin-top:14px">Services</h2>
+    <div id="svcs" class="mut">– noch nicht verbunden –</div>
+    <h2>Roh-Befehl senden</h2>
+    <select id="rawChar"></select>
+    <div class="row"><input id="rawHex" placeholder="Hex, z. B. 02 53 01 52 03"><button id="rawSend" style="flex:0 0 auto">Senden</button></div>
+    <h2>Log</h2>
+    <div class="row" style="margin-top:0"><button id="logCopy">Log kopieren</button><button id="logClear">Log leeren</button></div>
+    <div id="log"></div>
+  </div>
+</section>
+
+<nav>
+  <button data-tab="ctl" class="on">Steuerung</button>
+  <button data-tab="prog">Programme</button>
+  <button data-tab="hist">Verlauf</button>
+  <button data-tab="set">Mehr</button>
+</nav>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const U = n => (typeof n === "number" ? BluetoothUUID.canonicalUUID(n) : n.toLowerCase());
+
+/* ---------- Speicher (robust) ---------- */
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem("lb_"+k); return v==null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem("lb_"+k, JSON.stringify(v)); }catch(e){} }
+};
+
+/* ---------- Log ---------- */
+const logLines = [];
+function log(msg){
+  const t = new Date().toLocaleTimeString("de-DE");
+  logLines.push(t+"  "+msg);
+  if(logLines.length > 600) logLines.shift();
+  const el = $("#log"); el.textContent = logLines.join("\n"); el.scrollTop = el.scrollHeight;
+}
+const hex = dv => Array.from(new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength)).map(b=>b.toString(16).padStart(2,"0")).join(" ");
+
+/* ---------- Bekannte Services ---------- */
+const FTMS = U(0x1826), C_TD = U(0x2acd), C_CP = U(0x2ad9), C_SR = U(0x2ad4), C_MS = U(0x2ada), C_TS = U(0x2ad3), C_FEAT = U(0x2acc);
+const OPTIONAL = [
+  0x1826, 0x180a, 0x180d, 0x180f, 0x1814, 0x1816, 0x1818,
+  0xfff0, 0xffe0, 0xfee7, 0xfe00, 0xffc0, 0xff00, 0xfd00, 0xae00, 0xffa0, 0xfff1, 0xffb0, 0xfef5,
+  "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
+  "49535343-fe7d-4ae5-8fa9-9fafd205e455",
+  "0000ffe0-0000-1000-8000-00805f9b34fb"
+];
+const NAMES = {
+  [U(0x1826)]:"Fitness Machine (FTMS)", [U(0x180a)]:"Geräte-Info", [U(0x180d)]:"Herzfrequenz", [U(0x180f)]:"Batterie",
+  [U(0x1814)]:"Laufsensor (RSC)", [U(0x2acd)]:"Treadmill Data", [U(0x2ad9)]:"Control Point", [U(0x2ad4)]:"Speed Range",
+  [U(0x2ada)]:"Machine Status", [U(0x2ad3)]:"Training Status", [U(0x2acc)]:"FTMS Features",
+  [U(0x2a29)]:"Hersteller", [U(0x2a24)]:"Modell", [U(0x2a26)]:"Firmware", [U(0x2a25)]:"Seriennummer"
+};
+
+/* ---------- Zustand ---------- */
+const S = {
+  dev:null, cp:null, ftms:false, control:false, userDisc:false,
+  speed:0, time:0, dist:0, kcal:0, hr:null,
+  devTime:false, devDist:false, devKcal:false,
+  belt:false,            // Band läuft (laut Gerät oder lokal angenommen)
+  paused:false,
+  target:null,           // Zielgeschwindigkeit
+  range:{min:1, max:6, inc:0.1},
+  session:null,          // {start, time, dist, kcal}
+  zeroSince:0,
+  chars:[]               // alle Characteristics für Diagnose
+};
+let cfg = Object.assign({weight:75, step:0.5, presets:"1, 2, 3, 4, 5, 6", voice:true, beep:true, autoRe:true, showAll:false, uuids:""}, store.get("cfg", {}));
+
+/* ---------- GATT-Warteschlange ---------- */
+let q = Promise.resolve();
+function gatt(fn){ const p = q.then(fn, fn); q = p.catch(()=>{}); return p; }
+
+/* ---------- UI-Status ---------- */
+function setStatus(txt, mode){
+  $("#status").textContent = txt;
+  $("#dot").className = "dot" + (mode==="on" ? " on" : mode==="busy" ? " busy" : "");
+  $("#btnConnect").textContent = S.dev && S.dev.gatt.connected ? "Trennen" : "Verbinden";
+  $("#btnConnect").className = S.dev && S.dev.gatt.connected ? "" : "acc";
+}
+
+/* ---------- Verbinden ---------- */
+async function connect(){
+  if(!navigator.bluetooth){ return; }
+  const extra = cfg.uuids.split(",").map(s=>s.trim()).filter(Boolean).map(s=>/^[0-9a-f]{4}$/i.test(s) ? parseInt(s,16) : s.toLowerCase());
+  try{
+    setStatus("Gerät auswählen …","busy");
+    const opts = cfg.showAll
+      ? {acceptAllDevices:true, optionalServices:[...OPTIONAL, ...extra]}
+      : {filters:[{services:[0x1826]}, {namePrefix:"LJJ"}], optionalServices:[...OPTIONAL, ...extra]};
+    const dev = await navigator.bluetooth.requestDevice(opts);
+    S.dev = dev; S.userDisc = false;
+    dev.addEventListener("gattserverdisconnected", onDisconnected);
+    await setup();
+  }catch(e){
+    log("Verbinden abgebrochen/Fehler: "+e.message);
+    setStatus("Nicht verbunden");
+  }
+}
+
+async function setup(){
+  const dev = S.dev;
+  setStatus("Verbinde mit "+(dev.name||"Gerät")+" …","busy");
+  const server = await dev.gatt.connect();
+  log("Verbunden: "+(dev.name||"(ohne Namen)")+"  id="+dev.id);
+  S.ftms = false; S.control = false; S.cp = null; S.chars = [];
+  let services = [];
+  try{ services = await server.getPrimaryServices(); }catch(e){ log("Keine Services lesbar: "+e.message); }
+
+  let svcTxt = "";
+  for(const svc of services){
+    svcTxt += "SERVICE "+svc.uuid+(NAMES[svc.uuid] ? "  ["+NAMES[svc.uuid]+"]" : "")+"\n";
+    let chars = [];
+    try{ chars = await svc.getCharacteristics(); }catch(e){}
+    for(const c of chars){
+      const p = c.properties, props = ["read","write","writeWithoutResponse","notify","indicate"].filter(k=>p[k]).join(",");
+      svcTxt += "  char "+c.uuid+(NAMES[c.uuid] ? " ["+NAMES[c.uuid]+"]" : "")+"  ("+props+")\n";
+      S.chars.push(c);
+      if(p.read && svc.uuid === U(0x180a)){
+        try{ const v = await c.readValue(); const s = new TextDecoder().decode(v).replace(/\0/g,""); svcTxt += "      = \""+s+"\"\n"; }catch(e){}
+      }
+    }
+    if(svc.uuid === FTMS) S.ftms = true;
+  }
+  $("#svcs").textContent = svcTxt || "(keine bekannten Services gefunden – ggf. UUID oben ergänzen)";
+  fillRawChars();
+
+  // Benachrichtigungen abonnieren
+  for(const c of S.chars){
+    if(c.properties.notify || c.properties.indicate){
+      try{
+        await c.startNotifications();
+        c.addEventListener("characteristicvaluechanged", ev => onNotify(c, ev.target.value));
+      }catch(e){ log("Notify fehlgeschlagen "+c.uuid.slice(4,8)+": "+e.message); }
+    }
+  }
+
+  if(S.ftms){
+    S.cp = S.chars.find(c=>c.uuid===C_CP) || null;
+    const sr = S.chars.find(c=>c.uuid===C_SR);
+    if(sr){
+      try{
+        const v = await sr.readValue();
+        S.range = {min:v.getUint16(0,true)/100, max:v.getUint16(2,true)/100, inc:Math.max(0.1, v.getUint16(4,true)/100)};
+        log("Geschwindigkeitsbereich: "+S.range.min+" – "+S.range.max+" km/h, Schritt "+S.range.inc);
+      }catch(e){}
+    }
+    $("#warnProto").style.display = "none";
+    if(S.cp) await requestControl();
+    else log("FTMS ohne Control Point – nur Anzeige möglich.");
+  }else{
+    const w = $("#warnProto");
+    w.innerHTML = "Dieses Band nutzt kein Standard-Protokoll (FTMS). Die Steuerung geht deshalb noch nicht. Bitte unter <b>Mehr → Diagnose</b> Screenshots von „Services“ und „Log“ machen und an Claude schicken.";
+    w.style.display = "block";
+  }
+  renderPresets();
+  setStatus((dev.name||"Laufband")+(S.ftms ? " · FTMS" : " · unbekanntes Protokoll"),"on");
+}
+
+function onDisconnected(){
+  log("Verbindung getrennt.");
+  S.cp = null; S.control = false; S.belt = false;
+  setStatus("Verbindung getrennt");
+  if(S.userDisc || !cfg.autoRe) return;
+  say("Verbindung verloren");
+  let tries = 0;
+  const retry = async () => {
+    if(!S.dev || S.dev.gatt.connected || S.userDisc) return;
+    tries++;
+    try{ await setup(); say("Wieder verbunden"); }
+    catch(e){ log("Neuverbindung "+tries+" fehlgeschlagen: "+e.message); if(tries < 5) setTimeout(retry, 2000*tries); else setStatus("Nicht verbunden"); }
+  };
+  setTimeout(retry, 1000);
+}
+
+function disconnect(){
+  S.userDisc = true;
+  if(S.dev && S.dev.gatt.connected) S.dev.gatt.disconnect();
+  setStatus("Nicht verbunden");
+}
+
+/* ---------- Eingehende Daten ---------- */
+function onNotify(c, v){
+  if(c.uuid === C_TD) return parseTreadmill(v);
+  if(c.uuid === C_CP) return parseCpResp(v);
+  if(c.uuid === C_MS){ log("Machine Status: "+hex(v)); return; }
+  if(c.uuid === C_TS){ return; }
+  if(c.uuid === U(0x2a37)){ const f=v.getUint8(0); S.hr = f&1 ? v.getUint16(1,true) : v.getUint8(1); return; }
+  log("◀ "+c.uuid.slice(4,8)+": "+hex(v));
+}
+
+function parseTreadmill(v){
+  let o = 0; const f = v.getUint16(o,true); o += 2;
+  const has = b => (f >> b) & 1;
+  if(!has(0)){ S.speed = v.getUint16(o,true)/100; o += 2; }
+  if(has(1)) o += 2;                                     // Ø Speed
+  if(has(2)){ S.dist = (v.getUint16(o,true) + (v.getUint8(o+2)<<16))/1000; S.devDist = true; o += 3; }
+  if(has(3)) o += 4;                                     // Steigung
+  if(has(4)) o += 4;                                     // Höhenmeter
+  if(has(5)) o += 1;                                     // Pace
+  if(has(6)) o += 1;
+  if(has(7)){ const k = v.getUint16(o,true); if(k !== 0xffff){ S.kcal = k; S.devKcal = k>0 || S.devKcal; } o += 5; }
+  if(has(8)){ const h = v.getUint8(o); if(h) S.hr = h; o += 1; }
+  if(has(9)) o += 1;
+  if(has(10)){ S.time = v.getUint16(o,true); S.devTime = true; o += 2; }
+  S.belt = S.speed > 0.05;
+  if(S.belt) S.paused = false;
+  if(S.target == null && S.belt) S.target = S.speed;
+}
+
+const OPS = {0:"Steuerung anfordern",1:"Reset",2:"Geschwindigkeit",7:"Start",8:"Stopp/Pause"};
+const RES = {1:"OK",2:"nicht unterstützt",3:"ungültiger Wert",4:"fehlgeschlagen",5:"nicht erlaubt"};
+function parseCpResp(v){
+  if(v.getUint8(0) !== 0x80) return log("CP: "+hex(v));
+  const op = v.getUint8(1), r = v.getUint8(2);
+  log("Antwort "+(OPS[op]||op)+": "+(RES[r]||r));
+  if(op === 0 && r === 1) S.control = true;
+  if(r === 5) S.control = false;
+}
+
+/* ---------- Befehle (FTMS) ---------- */
+async function cpWrite(bytes){
+  if(!S.cp){ log("Kein Steuerkanal – verbunden? FTMS?"); return false; }
+  return gatt(async () => {
+    const data = new Uint8Array(bytes);
+    log("▶ CP "+Array.from(data).map(b=>b.toString(16).padStart(2,"0")).join(" "));
+    try{
+      if(S.cp.writeValueWithResponse) await S.cp.writeValueWithResponse(data);
+      else await S.cp.writeValue(data);
+      return true;
+    }catch(e){ log("Schreibfehler: "+e.message); return false; }
+  });
+}
+async function requestControl(){ await cpWrite([0x00]); await new Promise(r=>setTimeout(r,250)); }
+async function ensureControl(){ if(!S.control) await requestControl(); }
+
+async function cmdStart(){
+  if(!S.cp){ needConn(); return; }
+  await ensureControl();
+  await cpWrite([0x07]);
+  S.paused = false;
+  beginSession();
+  if(S.target){ setTimeout(()=>sendSpeed(S.target), 1500); }
+}
+async function cmdPause(){ if(!S.cp){ needConn(); return; } await ensureControl(); await cpWrite([0x08,0x02]); S.paused = true; }
+async function cmdStop(){
+  stopProgram(false);
+  if(S.cp){ await ensureControl(); await cpWrite([0x08,0x01]); }
+  S.paused = false;
+  endSession();
+}
+async function sendSpeed(kmh){
+  if(!S.cp) return;
+  await ensureControl();
+  const v = Math.round(kmh*100);
+  await cpWrite([0x02, v & 0xff, (v >> 8) & 0xff]);
+}
+function needConn(){
+  if(!S.dev || !S.dev.gatt.connected) alert("Bitte zuerst mit dem Laufband verbinden.");
+  else alert("Dieses Band unterstützt die Standard-Steuerung nicht. Bitte Diagnose-Daten an Claude schicken (Mehr → Diagnose).");
+}
+
+let spTimer = null;
+function setTarget(kmh, immediate){
+  const r = S.range;
+  kmh = Math.min(r.max, Math.max(r.min, Math.round(kmh*10)/10));
+  S.target = kmh;
+  $("#tgtSpeed").textContent = kmh.toFixed(1);
+  clearTimeout(spTimer);
+  spTimer = setTimeout(()=>sendSpeed(kmh), immediate ? 0 : 350);
+}
+
+/* ---------- Session / Verlauf ---------- */
+function beginSession(){
+  if(S.session) return;
+  S.session = {start:Date.now(), t0:S.devTime ? S.time : 0, d0:S.devDist ? S.dist : 0, k0:S.devKcal ? S.kcal : 0, time:0, dist:0, kcal:0};
+  if(!S.devTime) S.time = 0;
+  if(!S.devDist) S.dist = 0;
+  if(!S.devKcal) S.kcal = 0;
+  lastKm = 0;
+  requestWake();
+}
+function sessionVals(){
+  const s = S.session; if(!s) return {time:S.time, dist:S.dist, kcal:S.kcal};
+  return {
+    time: Math.max(0, S.time - s.t0),
+    dist: Math.max(0, S.dist - s.d0),
+    kcal: Math.max(0, S.kcal - s.k0)
+  };
+}
+function endSession(){
+  const s = S.session; if(!s) return;
+  const v = sessionVals();
+  S.session = null;
+  releaseWake();
+  if(v.time < 30 || v.dist < 0.01) return;
+  const h = store.get("hist", []);
+  h.unshift({date:s.start, time:Math.round(v.time), dist:+v.dist.toFixed(3), kcal:Math.round(v.kcal)});
+  store.set("hist", h);
+  say("Training beendet. "+fmtKm(v.dist)+" Kilometer in "+Math.round(v.time/60)+" Minuten.");
+  renderHist();
+}
+
+/* ---------- Programme ---------- */
+const BUILTIN = [
+  {name:"Gemütlich 30 Min", text:"3 2\n24 3.5\n3 2"},
+  {name:"Intervall leicht", text:"3 2.5\n6x: 2 4.5; 1 3\n3 2.5"},
+  {name:"Intervall flott", text:"4 3\n8x: 1 6; 1.5 3.5\n4 2.5"},
+  {name:"Pyramide", text:"3 2.5\n3 3.5\n3 4.5\n3 5.5\n3 4.5\n3 3.5\n3 2.5"},
+  {name:"Fettverbrennung 45 Min", text:"5 3\n35 4.5\n5 3"},
+];
+function parseProg(text){
+  const segs = [];
+  for(let line of text.split("\n")){
+    line = line.trim().replace(/,(?=\d)/g,".");
+    if(!line || line.startsWith("#")) continue;
+    const m = line.match(/^(\d+)\s*x\s*:?\s*(.+)$/i);
+    if(m){
+      const parts = m[2].split(";").map(p=>p.trim().split(/\s+/).map(Number)).filter(p=>p.length>=2 && p[0]>0 && p[1]>=0);
+      for(let i=0;i<+m[1];i++) parts.forEach(p=>segs.push({min:p[0], speed:p[1]}));
+    }else{
+      const p = line.split(/\s+/).map(Number);
+      if(p.length>=2 && p[0]>0 && p[1]>=0) segs.push({min:p[0], speed:p[1]});
+    }
+  }
+  return segs;
+}
+const progDur = segs => segs.reduce((a,s)=>a+s.min,0);
+const progDist = segs => segs.reduce((a,s)=>a+s.min/60*s.speed,0);
+
+function renderProgs(){
+  const custom = store.get("progs", []);
+  const all = [...BUILTIN.map(p=>({...p, builtin:true})), ...custom];
+  const el = $("#progList"); el.innerHTML = "";
+  all.forEach((p, i) => {
+    const segs = parseProg(p.text);
+    const row = document.createElement("div"); row.className = "prog";
+    row.innerHTML = `<div><div class="n"></div><div class="d">${Math.round(progDur(segs))} Min · ca. ${progDist(segs).toFixed(1)} km · ${segs.length} Phasen</div></div>`;
+    row.querySelector(".n").textContent = p.name;
+    const btns = document.createElement("div"); btns.style.display = "flex"; btns.style.gap = "6px";
+    const go = document.createElement("button"); go.className = "acc"; go.textContent = "Start";
+    go.onclick = () => { startProgram(p.name, segs); showTab("ctl"); };
+    btns.append(go);
+    if(!p.builtin){
+      const ed = document.createElement("button"); ed.textContent = "✎";
+      ed.onclick = () => { $("#pName").value = p.name; $("#pText").value = p.text; };
+      const del = document.createElement("button"); del.textContent = "🗑";
+      del.onclick = () => { if(confirm("„"+p.name+"“ löschen?")){ store.set("progs", custom.filter(x=>x.name!==p.name)); renderProgs(); } };
+      btns.append(ed, del);
+    }
+    row.append(btns); el.append(row);
+  });
+}
+$("#pSave").onclick = () => {
+  const name = $("#pName").value.trim(), text = $("#pText").value;
+  const segs = parseProg(text);
+  if(!name) return alert("Bitte einen Namen eingeben.");
+  if(!segs.length) return alert("Keine gültigen Phasen gefunden. Format: Minuten Geschwindigkeit, z. B. „5 3.5“.");
+  const custom = store.get("progs", []).filter(p=>p.name!==name);
+  custom.push({name, text}); store.set("progs", custom);
+  renderProgs(); alert("Gespeichert: "+name+" ("+Math.round(progDur(segs))+" Min)");
+};
+
+let P = null; // laufendes Programm
+async function startProgram(name, segs){
+  if(!S.cp){ needConn(); return; }
+  if(!segs.length) return;
+  P = {name, segs, idx:0, left:segs[0].min*60, total:progDur(segs)*60, done:0};
+  $("#progRun").style.display = "block";
+  say("Programm "+name+" startet. "+segText(segs[0]));
+  S.target = segs[0].speed; $("#tgtSpeed").textContent = S.target.toFixed(1);
+  await cmdStart();
+  renderProg();
+}
+function segText(s){ return fmtKmh(s.speed)+" für "+fmtMin(s.min); }
+function nextSeg(){
+  P.idx++;
+  if(P.idx >= P.segs.length){
+    say("Programm geschafft! Gut gemacht.");
+    beep(3);
+    stopProgram(true);
+    return;
+  }
+  const s = P.segs[P.idx];
+  P.left = s.min*60;
+  beep(1);
+  say(segText(s));
+  setTarget(s.speed, true);
+}
+function stopProgram(stopBelt){
+  if(!P) return;
+  P = null;
+  $("#progRun").style.display = "none";
+  if(stopBelt) cmdStop();
+}
+function programTick(){
+  if(!P || !S.belt || S.paused) return;
+  P.left--; P.done++;
+  if(P.left === 3 && cfg.beep) beep(1, 440);
+  if(P.left <= 0) nextSeg();
+  renderProg();
+}
+function renderProg(){
+  if(!P) return;
+  const s = P.segs[P.idx];
+  $("#prName").textContent = P.name;
+  $("#prLeft").textContent = "noch "+fmtTime(Math.max(0, P.total-P.done));
+  const nx = P.segs[P.idx+1];
+  $("#prSeg").textContent = "Phase "+(P.idx+1)+"/"+P.segs.length+": "+s.speed.toFixed(1)+" km/h · noch "+fmtTime(P.left)+(nx ? "  →  danach "+nx.speed.toFixed(1)+" km/h" : "");
+  $("#prBar").style.width = (100*P.done/P.total).toFixed(1)+"%";
+}
+$("#prSkip").onclick = () => { if(P) nextSeg(); };
+$("#prAbort").onclick = () => { if(P && confirm("Programm beenden? Das Band läuft weiter.")){ stopProgram(false); } };
+
+/* ---------- Ziele ---------- */
+let goalHit = false;
+function goalTick(){
+  const type = $("#goalType").value, val = parseFloat(($("#goalVal").value||"").replace(",","."));
+  if(type==="none" || !(val>0) || !S.session){ $("#goalInfo").textContent = "Bei Erreichen des Ziels hält das Band automatisch an."; return; }
+  const v = sessionVals();
+  const cur = type==="time" ? v.time/60 : type==="dist" ? v.dist : v.kcal;
+  const unit = type==="time" ? "Min" : type==="dist" ? "km" : "kcal";
+  const pct = Math.min(100, 100*cur/val);
+  $("#goalInfo").textContent = "Fortschritt: "+(type==="dist" ? cur.toFixed(2) : Math.floor(cur))+" / "+val+" "+unit+" ("+pct.toFixed(0)+" %)";
+  if(cur >= val && !goalHit){ goalHit = true; beep(3); say("Ziel erreicht!"); cmdStop(); }
+  if(cur < val) goalHit = false;
+}
+
+/* ---------- Ticker ---------- */
+let lastKm = 0;
+setInterval(() => {
+  // Lokale Hochrechnung, falls das Gerät Werte nicht liefert
+  if(S.belt && !S.paused){
+    beginSession();
+    if(!S.devTime) S.time += 1;
+    if(!S.devDist) S.dist += S.speed/3600;
+  }
+  if(!S.devKcal && S.session){
+    // Gehen: ca. 0,5–0,75 kcal pro kg und km, abhängig vom Tempo
+    const v = sessionVals(), f = S.speed > 6 ? 0.9 : S.speed > 4.5 ? 0.65 : 0.5;
+    S.kcal = S.session.k0 + v.dist * cfg.weight * f;
+  }
+  // Automatisches Sessionende nach 90 s Stillstand
+  if(S.session){
+    if(S.belt) S.zeroSince = 0;
+    else if(!S.paused){ S.zeroSince ||= Date.now(); if(Date.now()-S.zeroSince > 90000){ stopProgram(false); endSession(); } }
+    const km = Math.floor(sessionVals().dist);
+    if(km > lastKm){ lastKm = km; say(km+(km===1?" Kilometer":" Kilometer")+" geschafft"); }
+  }
+  programTick();
+  goalTick();
+  render();
+}, 1000);
+
+/* ---------- Anzeige ---------- */
+const fmtTime = s => { s = Math.round(s); const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = s%60; return (h ? h+":"+String(m).padStart(2,"0") : m)+":"+String(x).padStart(2,"0"); };
+const fmtKm = d => d.toFixed(1).replace(".",",");
+const fmtKmh = v => (Number.isInteger(v) ? v : v.toFixed(1).replace(".",","))+" Kilometer pro Stunde";
+const fmtMin = m => m < 1 ? Math.round(m*60)+" Sekunden" : (Number.isInteger(m) ? m : m.toString().replace(".",","))+(m===1?" Minute":" Minuten");
+function render(){
+  const v = sessionVals();
+  $("#mSpeed").textContent = S.speed.toFixed(1);
+  $("#mTime").textContent = fmtTime(v.time);
+  $("#mDist").textContent = v.dist.toFixed(2);
+  $("#mKcal").textContent = Math.round(v.kcal);
+  if(S.hr){ $("#mExtraL").textContent = "Puls"; $("#mExtra").innerHTML = S.hr+"<small>bpm</small>"; }
+  else{
+    $("#mExtraL").textContent = "Ø Geschw.";
+    $("#mExtra").innerHTML = v.time > 10 ? (v.dist/(v.time/3600)).toFixed(1)+"<small>km/h</small>" : "–";
+  }
+  $("#btnPause").textContent = S.paused ? "▶ Weiter" : "❚❚ Pause";
+  if(S.target != null) $("#tgtSpeed").textContent = S.target.toFixed(1);
+}
+function renderPresets(){
+  const el = $("#presets"); el.innerHTML = "";
+  cfg.presets.split(",").map(s=>parseFloat(s.trim())).filter(n=>n>0).slice(0,12).forEach(n=>{
+    const b = document.createElement("button"); b.textContent = n;
+    b.onclick = () => setTarget(n, true);
+    el.append(b);
+  });
+}
+function renderHist(){
+  const h = store.get("hist", []);
+  const tb = $("#histBody"); tb.innerHTML = "";
+  h.slice(0, 100).forEach(r => {
+    const tr = document.createElement("tr");
+    const d = new Date(r.date);
+    tr.innerHTML = `<td>${d.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})} ${d.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}</td><td>${fmtTime(r.time)}</td><td>${r.dist.toFixed(2)}</td><td>${r.kcal}</td><td>${(r.dist/(r.time/3600)).toFixed(1)}</td>`;
+    tb.append(tr);
+  });
+  if(!h.length) tb.innerHTML = `<tr><td colspan="5" class="mut" style="text-align:left">Noch keine Trainings.</td></tr>`;
+  const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const sum = arr => arr.reduce((a,r)=>a+r.dist,0);
+  $("#sToday").textContent = sum(h.filter(r=>r.date>=today)).toFixed(2);
+  $("#sWeek").textContent = sum(h.filter(r=>r.date>=today-6*864e5)).toFixed(2);
+  $("#sAll").textContent = sum(h).toFixed(0);
+  $("#sCount").textContent = h.length;
+}
+$("#btnCsv").onclick = () => {
+  const h = store.get("hist", []);
+  const rows = [["Datum","Dauer (s)","Distanz (km)","Kalorien","Ø km/h"], ...h.map(r=>[new Date(r.date).toLocaleString("de-DE"), r.time, String(r.dist).replace(".",","), r.kcal, (r.dist/(r.time/3600)).toFixed(2).replace(".",",")])];
+  const csv = rows.map(r=>r.join(";")).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["﻿"+csv], {type:"text/csv"}));
+  a.download = "laufband-verlauf.csv"; a.click();
+};
+$("#btnClear").onclick = () => { if(confirm("Gesamten Verlauf löschen?")){ store.set("hist", []); renderHist(); } };
+
+/* ---------- Diagnose: Roh-Befehle ---------- */
+function fillRawChars(){
+  const sel = $("#rawChar"); sel.innerHTML = "";
+  S.chars.filter(c=>c.properties.write || c.properties.writeWithoutResponse).forEach((c,i)=>{
+    const o = document.createElement("option"); o.value = S.chars.indexOf(c);
+    o.textContent = c.service.uuid.slice(4,8)+" / "+c.uuid.slice(4,8)+(NAMES[c.uuid] ? " "+NAMES[c.uuid] : "")+(c.properties.write ? "" : " (ohne Antwort)");
+    sel.append(o);
+  });
+  if(!sel.options.length){ const o = document.createElement("option"); o.textContent = "– keine beschreibbaren Kanäle –"; sel.append(o); }
+}
+$("#rawSend").onclick = async () => {
+  const c = S.chars[+$("#rawChar").value]; if(!c) return;
+  const bytes = ($("#rawHex").value.match(/[0-9a-f]{2}/gi) || []).map(h=>parseInt(h,16));
+  if(!bytes.length) return;
+  await gatt(async () => {
+    try{
+      const d = new Uint8Array(bytes);
+      if(c.properties.writeWithoutResponse && !c.properties.write) await c.writeValueWithoutResponse(d);
+      else await c.writeValue(d);
+      log("▶ "+c.uuid.slice(4,8)+": "+bytes.map(b=>b.toString(16).padStart(2,"0")).join(" "));
+    }catch(e){ log("Fehler: "+e.message); }
+  });
+};
+$("#logCopy").onclick = async () => {
+  const txt = "== Services ==\n"+$("#svcs").textContent+"\n== Log ==\n"+logLines.join("\n");
+  try{ await navigator.clipboard.writeText(txt); alert("Kopiert – jetzt einfach im Chat einfügen."); }catch(e){ alert("Kopieren nicht möglich, bitte Screenshot machen."); }
+};
+$("#logClear").onclick = () => { logLines.length = 0; $("#log").textContent = ""; };
+
+/* ---------- Ton, Sprache, Bildschirm an ---------- */
+let actx = null;
+function beep(n=1, freq=880){
+  if(!cfg.beep) return;
+  try{
+    actx ||= new (window.AudioContext||window.webkitAudioContext)();
+    for(let i=0;i<n;i++){
+      const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime + i*0.25;
+      o.frequency.value = freq; o.connect(g); g.connect(actx.destination);
+      g.gain.setValueAtTime(0.25, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.18);
+      o.start(t); o.stop(t+0.2);
+    }
+  }catch(e){}
+}
+function say(txt){
+  if(!cfg.voice || !window.speechSynthesis) return;
+  try{ const u = new SpeechSynthesisUtterance(txt); u.lang = "de-DE"; speechSynthesis.speak(u); }catch(e){}
+}
+let wake = null;
+async function requestWake(){ try{ if("wakeLock" in navigator && !wake){ wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", ()=>{ wake = null; }); } }catch(e){} }
+function releaseWake(){ try{ wake && wake.release(); }catch(e){} wake = null; }
+document.addEventListener("visibilitychange", () => { if(document.visibilityState==="visible" && S.session) requestWake(); });
+
+/* ---------- Einstellungen ---------- */
+function loadCfgUI(){
+  $("#setWeight").value = cfg.weight; $("#setStep").value = String(cfg.step); $("#setPresets").value = cfg.presets;
+  $("#setVoice").checked = cfg.voice; $("#setBeep").checked = cfg.beep; $("#setAutoRe").checked = cfg.autoRe; $("#setShowAll").checked = cfg.showAll; $("#setUuids").value = cfg.uuids;
+}
+function saveCfg(){
+  cfg = {weight:parseFloat($("#setWeight").value)||75, step:parseFloat($("#setStep").value)||0.5, presets:$("#setPresets").value,
+         voice:$("#setVoice").checked, beep:$("#setBeep").checked, autoRe:$("#setAutoRe").checked, showAll:$("#setShowAll").checked, uuids:$("#setUuids").value};
+  store.set("cfg", cfg); renderPresets();
+}
+["#setWeight","#setStep","#setPresets","#setVoice","#setBeep","#setAutoRe","#setShowAll","#setUuids"].forEach(s=>$(s).addEventListener("change", saveCfg));
+
+/* ---------- Tabs & Buttons ---------- */
+function showTab(t){
+  document.querySelectorAll(".tab").forEach(e=>e.classList.toggle("on", e.id==="tab-"+t));
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===t));
+  if(t==="hist") renderHist();
+  window.scrollTo(0,0);
+}
+document.querySelectorAll("nav button").forEach(b=>b.onclick = () => showTab(b.dataset.tab));
+$("#btnConnect").onclick = () => (S.dev && S.dev.gatt.connected) ? disconnect() : connect();
+$("#btnStart").onclick = () => cmdStart();
+$("#btnPause").onclick = () => S.paused ? cmdStart() : cmdPause();
+$("#btnStop").onclick = () => cmdStop();
+$("#spPlus").onclick = () => setTarget((S.target ?? S.speed) + cfg.step);
+$("#spMinus").onclick = () => setTarget((S.target ?? S.speed) - cfg.step);
+
+/* ---------- Start ---------- */
+loadCfgUI(); renderPresets(); renderProgs(); renderHist(); render();
+if(!navigator.bluetooth){
+  const w = $("#warnBt");
+  w.innerHTML = !window.isSecureContext
+    ? "Bluetooth geht nur über eine <b>https://</b>-Adresse. Bitte die App über den Online-Link öffnen, nicht als Datei."
+    : "Dieser Browser kann kein Bluetooth. Bitte die Seite in <b>Google Chrome</b> auf Android öffnen.";
+  w.style.display = "block";
+  $("#btnConnect").disabled = true;
+}
+</script>
+</body>
+</html>
