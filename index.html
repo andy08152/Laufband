@@ -2,6 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0f1115">
 <meta name="mobile-web-app-capable" content="yes">
@@ -238,6 +239,7 @@ nav button.on{color:var(--acc);background:var(--card)}
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
+const esc = t => String(t).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const U = n => (typeof n === "number" ? "0000"+n.toString(16).padStart(4,"0")+"-0000-1000-8000-00805f9b34fb" : n.toLowerCase());
 
 /* ---------- Speicher (robust) ---------- */
@@ -457,7 +459,7 @@ function parseCpResp(v){
     if(!ftmsHint){
       ftmsHint = true;
       const w = $("#warnProto");
-      w.innerHTML = "Über diesen Kanal (<b>"+((S.dev&&S.dev.name)||"FTMS")+"</b>) lässt das Band keine Steuerung zu. Bitte auf <b>Trennen</b> tippen, dann <b>Verbinden</b> und <b>LJJ-sports</b> auswählen.";
+      w.innerHTML = "Über diesen Kanal (<b>"+esc((S.dev&&S.dev.name)||"FTMS")+"</b>) lässt das Band keine Steuerung zu. Bitte auf <b>Trennen</b> tippen, dann <b>Verbinden</b> und <b>LJJ-sports</b> auswählen.";
       w.style.display = "block";
     }
   }
